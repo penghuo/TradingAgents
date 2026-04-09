@@ -1,10 +1,12 @@
 """Tests for tradingagents.backtest module."""
 
 import math
+from unittest.mock import patch
 
+import pandas as pd
 import pytest
 
-from tradingagents.backtest import Portfolio
+from tradingagents.backtest import Portfolio, fetch_trading_data
 
 
 class TestPortfolio:
@@ -67,3 +69,40 @@ class TestPortfolio:
     def test_total_value(self):
         p = Portfolio(cash=50_000, shares=100)
         assert p.total_value(price=200) == 70_000
+
+
+class TestTradingData:
+    """Tests for fetch_trading_data using mocked yfinance."""
+
+    @patch("tradingagents.backtest.yf.download")
+    def test_returns_only_dates_in_range(self, mock_download):
+        # 4 dates, filter to middle 3
+        dates = pd.to_datetime(["2024-01-08", "2024-01-09", "2024-01-10", "2024-01-11"])
+        df = pd.DataFrame(
+            {"Open": [100, 101, 102, 103], "Close": [110, 111, 112, 113]},
+            index=dates,
+        )
+        mock_download.return_value = df
+
+        result = fetch_trading_data("AAPL", "2024-01-08", "2024-01-10")
+        assert len(result) == 3
+        assert result.index[0] == pd.Timestamp("2024-01-08")
+        assert result.index[-1] == pd.Timestamp("2024-01-10")
+
+    @patch("tradingagents.backtest.yf.download")
+    def test_weekly_samples_first_day_of_week(self, mock_download):
+        # 2 full weeks of business days (Mon-Fri)
+        dates = pd.bdate_range("2024-01-08", periods=10)  # Mon Jan 8 - Fri Jan 19
+        df = pd.DataFrame(
+            {"Open": range(10), "Close": range(10, 20)},
+            index=dates,
+        )
+        mock_download.return_value = df
+
+        result = fetch_trading_data(
+            "AAPL", "2024-01-08", "2024-01-19", frequency="weekly"
+        )
+        assert len(result) == 2
+        # First trading day of each week
+        assert result.index[0] == pd.Timestamp("2024-01-08")  # Mon week 1
+        assert result.index[1] == pd.Timestamp("2024-01-15")  # Mon week 2

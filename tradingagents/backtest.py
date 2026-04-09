@@ -58,3 +58,52 @@ class Portfolio:
     def total_value(self, price: float) -> float:
         """Return total portfolio value at current price."""
         return self.cash + self.shares * price
+
+
+def fetch_trading_data(
+    ticker: str, start_date: str, end_date: str, frequency: str = "daily"
+) -> pd.DataFrame:
+    """Fetch OHLCV data from yfinance and return Open/Close columns.
+
+    Parameters
+    ----------
+    ticker : str
+        Stock ticker symbol.
+    start_date, end_date : str
+        Date range (inclusive) in YYYY-MM-DD format.
+    frequency : str
+        ``"daily"`` (default) or ``"weekly"`` (first trading day of each week).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame indexed by date with Open and Close columns.
+
+    Raises
+    ------
+    ValueError
+        If yfinance returns no data.
+    """
+    df = yf.download(ticker, start=start_date, end=end_date, progress=False)
+
+    if df is None or df.empty:
+        raise ValueError(
+            f"No data returned for {ticker} in [{start_date}, {end_date}]"
+        )
+
+    # Handle yfinance MultiIndex columns (ticker level)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    df = df[["Open", "Close"]]
+
+    # Filter to [start_date, end_date] inclusive
+    df = df.loc[start_date:end_date]
+
+    if frequency == "weekly":
+        # Keep the first trading day of each ISO week
+        week_numbers = df.index.isocalendar().week.values
+        mask = np.concatenate(([True], week_numbers[1:] != week_numbers[:-1]))
+        df = df[mask]
+
+    return df
