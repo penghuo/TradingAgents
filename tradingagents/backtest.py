@@ -251,19 +251,8 @@ class BacktestDriver:
             exec_price = float(ohlcv.loc[exec_date, "Open"])
 
             # Get signal from the agent graph
-            print(
-                f"  [{i + 1}/{len(dates) - 1}] Analyzing {signal_date_str} ...",
-                end="",
-                flush=True,
-            )
-            try:
-                _state, signal = graph.propagate(self.ticker, signal_date_str)
-                signal = signal.strip().upper()
-                if signal not in Portfolio.RULES:
-                    signal = "HOLD"
-            except Exception as exc:
-                print(f" ERROR: {exc}")
-                signal = "HOLD"
+            print(f"  [{i + 1}/{len(dates) - 1}] {signal_date_str}")
+            _state, signal = self._propagate_with_progress(graph, signal_date_str)
 
             # Execute at next-day open
             shares_traded = portfolio.execute(signal, exec_price)
@@ -333,6 +322,75 @@ class BacktestDriver:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _propagate_with_progress(self, graph, date_str: str) -> tuple:
+        """Run propagate() with per-stage progress logging. Fails fast on error."""
+        import time
+
+        init_state = graph.propagator.create_initial_state(self.ticker, date_str)
+        args = graph.propagator.get_graph_args()
+
+        prev_stage = None
+        stage_start = time.time()
+        final_state = None
+
+        for chunk in graph.graph.stream(init_state, **args):
+            # Detect which stage just completed by checking for new report content
+            stage = None
+            if chunk.get("market_report") and prev_stage != "Market Analyst":
+                stage = "Market Analyst"
+            elif chunk.get("sentiment_report") and prev_stage != "Social Analyst":
+                stage = "Social Analyst"
+            elif chunk.get("news_report") and prev_stage != "News Analyst":
+                stage = "News Analyst"
+            elif chunk.get("fundamentals_report") and prev_stage != "Fundamentals Analyst":
+                stage = "Fundamentals Analyst"
+            elif chunk.get("investment_debate_state", {}).get("bull_history") and prev_stage != "Bull Researcher":
+                stage = "Bull Researcher"
+            elif chunk.get("investment_debate_state", {}).get("bear_history") and prev_stage != "Bear Researcher":
+                stage = "Bear Researcher"
+            elif chunk.get("investment_debate_state", {}).get("judge_decision") and prev_stage != "Research Manager":
+                stage = "Research Manager"
+            elif chunk.get("trader_investment_plan") and prev_stage != "Trader":
+                stage = "Trader"
+            elif chunk.get("risk_debate_state", {}).get("aggressive_history") and prev_stage != "Aggressive Analyst":
+                stage = "Aggressive Analyst"
+            elif chunk.get("risk_debate_state", {}).get("conservative_history") and prev_stage != "Conservative Analyst":
+                stage = "Conservative Analyst"
+            elif chunk.get("risk_debate_state", {}).get("neutral_history") and prev_stage != "Neutral Analyst":
+                stage = "Neutral Analyst"
+            elif chunk.get("risk_debate_state", {}).get("judge_decision") and prev_stage != "Portfolio Manager":
+                stage = "Portfolio Manager"
+
+            if stage and stage != prev_stage:
+                elapsed = time.time() - stage_start
+                if prev_stage:
+                    print(f"         {prev_stage} done ({elapsed:.0f}s)")
+                print(f"       > {stage} ...", flush=True)
+                stage_start = time.time()
+                prev_stage = stage
+
+            final_state = chunk
+
+        if prev_stage:
+            elapsed = time.time() - stage_start
+            print(f"         {prev_stage} done ({elapsed:.0f}s)")
+
+        if final_state is None:
+            raise RuntimeError(f"No output from propagate() on {date_str}")
+
+        # Store state for reflection
+        graph.curr_state = final_state
+        graph._log_state(date_str, final_state)
+
+        # Extract signal
+        signal = graph.process_signal(final_state["final_trade_decision"])
+        signal = signal.strip().upper()
+        if signal not in Portfolio.RULES:
+            print(f"       ! Unknown signal '{signal}', defaulting to HOLD")
+            signal = "HOLD"
+
+        return final_state, signal
 
     @staticmethod
     def _save_trade_log(trade_log: List[dict], out_dir: Path) -> None:
