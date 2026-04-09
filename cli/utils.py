@@ -180,6 +180,12 @@ def select_shallow_thinking_agent(provider) -> str:
     if provider.lower() == "openrouter":
         return select_openrouter_model()
 
+    options = get_model_options(provider, "quick")
+    if len(options) == 1:
+        display, value = options[0]
+        console.print(f"[green]Quick-Thinking LLM:[/green] {display}")
+        return value
+
     choice = questionary.select(
         "Select Your [Quick-Thinking LLM Engine]:",
         choices=[
@@ -211,6 +217,12 @@ def select_deep_thinking_agent(provider) -> str:
     if provider.lower() == "openrouter":
         return select_openrouter_model()
 
+    options = get_model_options(provider, "deep")
+    if len(options) == 1:
+        display, value = options[0]
+        console.print(f"[green]Deep-Thinking LLM:[/green] {display}")
+        return value
+
     choice = questionary.select(
         "Select Your [Deep-Thinking LLM Engine]:",
         choices=[
@@ -239,6 +251,7 @@ def select_llm_provider() -> tuple[str, str | None]:
         ("OpenAI", "https://api.openai.com/v1"),
         ("Google", None),  # google-genai SDK manages its own endpoint
         ("Anthropic", "https://api.anthropic.com/"),
+        ("Bedrock", None),  # AWS SDK manages its own endpoint
         ("xAI", "https://api.x.ai/v1"),
         ("Openrouter", "https://openrouter.ai/api/v1"),
         ("Ollama", "http://localhost:11434/v1"),
@@ -268,6 +281,56 @@ def select_llm_provider() -> tuple[str, str | None]:
     print(f"You selected: {display_name}\tURL: {url}")
 
     return display_name, url
+
+
+def ask_bedrock_aws_profile() -> str | None:
+    """Ask for AWS profile name for Bedrock authentication."""
+    import os
+    default_profile = os.environ.get("AWS_PROFILE", "")
+    profile = questionary.text(
+        f"Enter AWS profile name (leave empty for default credentials):",
+        default=default_profile,
+        style=questionary.Style([
+            ("text", "fg:green"),
+            ("highlighted", "noinherit"),
+        ]),
+    ).ask()
+    return profile.strip() if profile and profile.strip() else None
+
+
+def ask_bedrock_role_arn() -> str | None:
+    """Ask for IAM role ARN to assume for Bedrock access."""
+    role_arn = questionary.text(
+        "Enter IAM Role ARN to assume (leave empty to use default credentials):",
+        default="",
+        style=questionary.Style([
+            ("text", "fg:green"),
+            ("highlighted", "noinherit"),
+        ]),
+    ).ask()
+    return role_arn.strip() if role_arn and role_arn.strip() else None
+
+
+def ask_bedrock_aws_region() -> str | None:
+    """Ask for AWS region for Bedrock."""
+    import os
+    default_region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", ""))
+    if not default_region:
+        try:
+            import boto3
+            session = boto3.Session(profile_name=os.environ.get("AWS_PROFILE"))
+            default_region = session.region_name or "us-west-2"
+        except Exception:
+            default_region = "us-west-2"
+    region = questionary.text(
+        f"Enter AWS region for Bedrock:",
+        default=default_region,
+        style=questionary.Style([
+            ("text", "fg:green"),
+            ("highlighted", "noinherit"),
+        ]),
+    ).ask()
+    return region.strip() if region and region.strip() else None
 
 
 def ask_openai_reasoning_effort() -> str:

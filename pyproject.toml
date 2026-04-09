@@ -32,6 +32,9 @@ dependencies = [
     "yfinance>=0.2.63",
 ]
 
+[project.optional-dependencies]
+bedrock = ["langchain-aws>=0.2.12"]
+
 [project.scripts]
 tradingagents = "cli.main:app"
 

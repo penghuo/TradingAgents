@@ -16,6 +16,10 @@ DEFAULT_CONFIG = {
     "google_thinking_level": None,      # "high", "minimal", etc.
     "openai_reasoning_effort": None,    # "medium", "high", "low"
     "anthropic_effort": None,           # "high", "medium", "low"
+    # AWS Bedrock configuration
+    "aws_region": None,                 # e.g. "us-east-1", "us-west-2"
+    "aws_profile": None,                # AWS profile name, e.g. "bedrock-prod"
+    "aws_role_arn": None,               # IAM role ARN to assume, e.g. "arn:aws:iam::123456:role/Bedrock-Access"
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
     "output_language": "English",

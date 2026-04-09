@@ -595,6 +595,21 @@ def get_user_selections():
         )
         anthropic_effort = ask_anthropic_effort()
 
+    # Bedrock-specific configuration
+    aws_profile = None
+    aws_region = None
+    aws_role_arn = None
+    if provider_lower == "bedrock":
+        console.print(
+            create_question_box(
+                "Step 9: AWS Configuration",
+                "Configure AWS credentials and region for Bedrock"
+            )
+        )
+        aws_role_arn = ask_bedrock_role_arn()
+        aws_profile = ask_bedrock_aws_profile()
+        aws_region = ask_bedrock_aws_region()
+
     return {
         "ticker": selected_ticker,
         "analysis_date": analysis_date,
@@ -607,6 +622,9 @@ def get_user_selections():
         "google_thinking_level": thinking_level,
         "openai_reasoning_effort": reasoning_effort,
         "anthropic_effort": anthropic_effort,
+        "aws_profile": aws_profile,
+        "aws_region": aws_region,
+        "aws_role_arn": aws_role_arn,
         "output_language": output_language,
     }
 
@@ -941,6 +959,9 @@ def run_analysis():
     config["google_thinking_level"] = selections.get("google_thinking_level")
     config["openai_reasoning_effort"] = selections.get("openai_reasoning_effort")
     config["anthropic_effort"] = selections.get("anthropic_effort")
+    config["aws_profile"] = selections.get("aws_profile")
+    config["aws_region"] = selections.get("aws_region")
+    config["aws_role_arn"] = selections.get("aws_role_arn")
     config["output_language"] = selections.get("output_language", "English")
 
     # Create stats callback handler for tracking LLM/tool calls

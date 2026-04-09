@@ -63,6 +63,14 @@ MODEL_OPTIONS: ProviderModeOptions = {
             ("Grok 4.1 Fast (Non-Reasoning) - Speed optimized, 2M ctx", "grok-4-1-fast-non-reasoning"),
         ],
     },
+    "bedrock": {
+        "quick": [
+            ("Claude Opus 4.6 1M ctx", "global.anthropic.claude-opus-4-6-v1"),
+        ],
+        "deep": [
+            ("Claude Opus 4.6 1M ctx", "global.anthropic.claude-opus-4-6-v1"),
+        ],
+    },
     # OpenRouter models are fetched dynamically at CLI runtime.
     # No static entries needed; any model ID is accepted by the validator.
     "ollama": {
