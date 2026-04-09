@@ -20,29 +20,45 @@ def _get_normalized_class():
     return NormalizedChatBedrockConverse
 
 
-def _assume_role(role_arn: str, region: Optional[str] = None) -> dict:
-    """Assume an IAM role via STS using base EC2 instance credentials."""
+def _create_bedrock_client(role_arn: str, region: Optional[str] = None):
+    """Create a bedrock-runtime boto3 client with auto-refreshing assumed role credentials."""
     import os
     import boto3
-    # Temporarily clear AWS_PROFILE so boto3 falls back to the EC2 instance
-    # metadata credentials instead of an already-assumed role.
-    saved_profile = os.environ.pop("AWS_PROFILE", None)
-    try:
-        session = boto3.Session(region_name=region)
-        sts = session.client("sts")
-    finally:
-        if saved_profile is not None:
-            os.environ["AWS_PROFILE"] = saved_profile
-    resp = sts.assume_role(
-        RoleArn=role_arn,
-        RoleSessionName="TradingAgents",
+    from botocore.credentials import DeferredRefreshableCredentials, RefreshableCredentials
+    from botocore.session import get_session
+
+    botocore_session = get_session()
+
+    def _refresh():
+        # Use base EC2 instance credentials (not the assumed role)
+        saved_profile = os.environ.pop("AWS_PROFILE", None)
+        try:
+            sts = boto3.Session(region_name=region).client("sts")
+        finally:
+            if saved_profile is not None:
+                os.environ["AWS_PROFILE"] = saved_profile
+
+        resp = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName="TradingAgents",
+        )
+        creds = resp["Credentials"]
+        return {
+            "access_key": creds["AccessKeyId"],
+            "secret_key": creds["SecretAccessKey"],
+            "token": creds["SessionToken"],
+            "expiry_time": creds["Expiration"].isoformat(),
+        }
+
+    refreshable_creds = RefreshableCredentials.create_from_metadata(
+        metadata=_refresh(),
+        refresh_using=_refresh,
+        method="sts-assume-role",
     )
-    creds = resp["Credentials"]
-    return {
-        "aws_access_key_id": creds["AccessKeyId"],
-        "aws_secret_access_key": creds["SecretAccessKey"],
-        "aws_session_token": creds["SessionToken"],
-    }
+    botocore_session._credentials = refreshable_creds
+
+    session = boto3.Session(botocore_session=botocore_session, region_name=region)
+    return session.client("bedrock-runtime")
 
 
 class BedrockClient(BaseLLMClient):
@@ -60,11 +76,10 @@ class BedrockClient(BaseLLMClient):
         if region:
             llm_kwargs["region_name"] = region
 
-        # Assume IAM role if role_arn is provided
+        # Assume IAM role with auto-refreshing credentials
         role_arn = self.kwargs.get("role_arn")
         if role_arn:
-            creds = _assume_role(role_arn, region)
-            llm_kwargs.update(creds)
+            llm_kwargs["client"] = _create_bedrock_client(role_arn, region)
 
         # Generous timeout for large models like Opus 4.6
         llm_kwargs["timeout"] = self.kwargs.get("timeout", 300)
