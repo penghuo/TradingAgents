@@ -327,54 +327,55 @@ class BacktestDriver:
         """Run propagate() with per-stage progress logging. Fails fast on error."""
         import time
 
+        graph.ticker = self.ticker
+
         init_state = graph.propagator.create_initial_state(self.ticker, date_str)
         args = graph.propagator.get_graph_args()
 
-        prev_stage = None
+        # Track which fields have been seen so we only fire once per stage
+        seen = set()
+        current_stage = None
         stage_start = time.time()
         final_state = None
 
+        # Map: (state_key, nested_key_or_None) -> stage name, in expected order
+        stage_checks = [
+            ("market_report", None, "Market Analyst"),
+            ("sentiment_report", None, "Social Analyst"),
+            ("news_report", None, "News Analyst"),
+            ("fundamentals_report", None, "Fundamentals Analyst"),
+            ("investment_debate_state", "bull_history", "Bull Researcher"),
+            ("investment_debate_state", "bear_history", "Bear Researcher"),
+            ("investment_debate_state", "judge_decision", "Research Manager"),
+            ("trader_investment_plan", None, "Trader"),
+            ("risk_debate_state", "aggressive_history", "Aggressive Analyst"),
+            ("risk_debate_state", "conservative_history", "Conservative Analyst"),
+            ("risk_debate_state", "neutral_history", "Neutral Analyst"),
+            ("risk_debate_state", "judge_decision", "Portfolio Manager"),
+        ]
+
         for chunk in graph.graph.stream(init_state, **args):
-            # Detect which stage just completed by checking for new report content
-            stage = None
-            if chunk.get("market_report") and prev_stage != "Market Analyst":
-                stage = "Market Analyst"
-            elif chunk.get("sentiment_report") and prev_stage != "Social Analyst":
-                stage = "Social Analyst"
-            elif chunk.get("news_report") and prev_stage != "News Analyst":
-                stage = "News Analyst"
-            elif chunk.get("fundamentals_report") and prev_stage != "Fundamentals Analyst":
-                stage = "Fundamentals Analyst"
-            elif chunk.get("investment_debate_state", {}).get("bull_history") and prev_stage != "Bull Researcher":
-                stage = "Bull Researcher"
-            elif chunk.get("investment_debate_state", {}).get("bear_history") and prev_stage != "Bear Researcher":
-                stage = "Bear Researcher"
-            elif chunk.get("investment_debate_state", {}).get("judge_decision") and prev_stage != "Research Manager":
-                stage = "Research Manager"
-            elif chunk.get("trader_investment_plan") and prev_stage != "Trader":
-                stage = "Trader"
-            elif chunk.get("risk_debate_state", {}).get("aggressive_history") and prev_stage != "Aggressive Analyst":
-                stage = "Aggressive Analyst"
-            elif chunk.get("risk_debate_state", {}).get("conservative_history") and prev_stage != "Conservative Analyst":
-                stage = "Conservative Analyst"
-            elif chunk.get("risk_debate_state", {}).get("neutral_history") and prev_stage != "Neutral Analyst":
-                stage = "Neutral Analyst"
-            elif chunk.get("risk_debate_state", {}).get("judge_decision") and prev_stage != "Portfolio Manager":
-                stage = "Portfolio Manager"
-
-            if stage and stage != prev_stage:
-                elapsed = time.time() - stage_start
-                if prev_stage:
-                    print(f"         {prev_stage} done ({elapsed:.0f}s)")
-                print(f"       > {stage} ...", flush=True)
-                stage_start = time.time()
-                prev_stage = stage
-
             final_state = chunk
 
-        if prev_stage:
-            elapsed = time.time() - stage_start
-            print(f"         {prev_stage} done ({elapsed:.0f}s)")
+            # Check each stage marker — only trigger on first appearance
+            for key, nested, stage_name in stage_checks:
+                if stage_name in seen:
+                    continue
+                if nested:
+                    val = chunk.get(key, {}).get(nested, "")
+                else:
+                    val = chunk.get(key, "")
+                if val:
+                    seen.add(stage_name)
+                    now = time.time()
+                    if current_stage:
+                        print(f"         {current_stage} done ({now - stage_start:.0f}s)")
+                    print(f"       > {stage_name} ...", flush=True)
+                    stage_start = now
+                    current_stage = stage_name
+
+        if current_stage:
+            print(f"         {current_stage} done ({time.time() - stage_start:.0f}s)")
 
         if final_state is None:
             raise RuntimeError(f"No output from propagate() on {date_str}")
