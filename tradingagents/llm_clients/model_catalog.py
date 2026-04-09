@@ -65,10 +65,12 @@ MODEL_OPTIONS: ProviderModeOptions = {
     },
     "bedrock": {
         "quick": [
+            ("Claude Sonnet 4.6 - Fast, cost-effective", "global.anthropic.claude-sonnet-4-6"),
             ("Claude Opus 4.6 1M ctx", "global.anthropic.claude-opus-4-6-v1"),
         ],
         "deep": [
             ("Claude Opus 4.6 1M ctx", "global.anthropic.claude-opus-4-6-v1"),
+            ("Claude Sonnet 4.6", "global.anthropic.claude-sonnet-4-6"),
         ],
     },
     # OpenRouter models are fetched dynamically at CLI runtime.
