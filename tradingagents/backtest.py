@@ -251,15 +251,21 @@ class BacktestDriver:
             exec_price = float(ohlcv.loc[exec_date, "Open"])
 
             # Get signal from the agent graph
+            print(
+                f"  [{i + 1}/{len(dates) - 1}] Analyzing {signal_date_str} ...",
+                end="",
+                flush=True,
+            )
             try:
                 _state, signal = graph.propagate(self.ticker, signal_date_str)
                 signal = signal.strip().upper()
                 if signal not in Portfolio.RULES:
                     signal = "HOLD"
-            except Exception:
+            except Exception as exc:
+                print(f" ERROR: {exc}")
                 signal = "HOLD"
 
-            # Execute
+            # Execute at next-day open
             shares_traded = portfolio.execute(signal, exec_price)
 
             # Track equity
@@ -288,17 +294,17 @@ class BacktestDriver:
                 }
             )
 
+            print(
+                f" {signal:12s} | exec {exec_date_str} @ ${exec_price:.2f}"
+                f" | traded={shares_traded:+5d}"
+                f" | value=${current_value:,.2f}"
+            )
+
             # Reflect if requested
             if self.reflect and shares_traded != 0:
+                print("    Reflecting on trade...", end="", flush=True)
                 graph.reflect_and_remember(current_value - self.initial_cash)
-
-            print(
-                f"  [{i + 1}/{len(dates) - 1}] {signal_date_str} -> "
-                f"{exec_date_str}  signal={signal:12s}  "
-                f"price={exec_price:8.2f}  "
-                f"traded={shares_traded:+5d}  "
-                f"value=${current_value:,.2f}"
-            )
+                print(" done")
 
         # 6. Buy-and-hold benchmark
         first_open = float(ohlcv.iloc[0]["Open"])
