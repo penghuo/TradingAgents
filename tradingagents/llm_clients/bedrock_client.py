@@ -20,11 +20,12 @@ def _get_normalized_class():
     return NormalizedChatBedrockConverse
 
 
-def _create_bedrock_client(role_arn: str, region: Optional[str] = None):
+def _create_bedrock_client(role_arn: str, region: Optional[str] = None, read_timeout: int = 600):
     """Create a bedrock-runtime boto3 client with auto-refreshing assumed role credentials."""
     import os
     import boto3
-    from botocore.credentials import DeferredRefreshableCredentials, RefreshableCredentials
+    from botocore.config import Config
+    from botocore.credentials import RefreshableCredentials
     from botocore.session import get_session
 
     botocore_session = get_session()
@@ -58,7 +59,12 @@ def _create_bedrock_client(role_arn: str, region: Optional[str] = None):
     botocore_session._credentials = refreshable_creds
 
     session = boto3.Session(botocore_session=botocore_session, region_name=region)
-    return session.client("bedrock-runtime")
+    boto_config = Config(
+        read_timeout=read_timeout,
+        connect_timeout=10,
+        retries={"max_attempts": 3},
+    )
+    return session.client("bedrock-runtime", config=boto_config)
 
 
 class BedrockClient(BaseLLMClient):
