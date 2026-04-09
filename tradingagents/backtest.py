@@ -107,3 +107,56 @@ def fetch_trading_data(
         df = df[mask]
 
     return df
+
+
+def compute_metrics(
+    equity_curve: List[float], trades_pnl: List[float]
+) -> Dict[str, float]:
+    """Compute backtest performance metrics.
+
+    Parameters
+    ----------
+    equity_curve : list of float
+        Portfolio value at each time step (at least 2 entries).
+    trades_pnl : list of float
+        Profit/loss for each individual trade.
+
+    Returns
+    -------
+    dict
+        ``total_return_pct``, ``max_drawdown_pct``, ``sharpe_ratio``,
+        ``win_rate_pct`` -- all rounded as specified.
+    """
+    eq = np.array(equity_curve, dtype=float)
+
+    # Total return
+    total_return_pct = round((eq[-1] / eq[0] - 1) * 100, 3)
+
+    # Max drawdown from peak
+    running_max = np.maximum.accumulate(eq)
+    drawdowns = (running_max - eq) / running_max * 100
+    max_drawdown_pct = round(float(np.max(drawdowns)), 3)
+
+    # Sharpe ratio (annualised, rf=0)
+    daily_returns = np.diff(eq) / eq[:-1]
+    if len(daily_returns) > 1 and np.std(daily_returns, ddof=1) > 0:
+        sharpe_ratio = round(
+            float(np.mean(daily_returns) / np.std(daily_returns, ddof=1) * np.sqrt(252)),
+            3,
+        )
+    else:
+        sharpe_ratio = 0.0
+
+    # Win rate
+    if len(trades_pnl) > 0:
+        wins = sum(1 for t in trades_pnl if t > 0)
+        win_rate_pct = round(wins / len(trades_pnl) * 100, 1)
+    else:
+        win_rate_pct = 0.0
+
+    return {
+        "total_return_pct": total_return_pct,
+        "max_drawdown_pct": max_drawdown_pct,
+        "sharpe_ratio": sharpe_ratio,
+        "win_rate_pct": win_rate_pct,
+    }

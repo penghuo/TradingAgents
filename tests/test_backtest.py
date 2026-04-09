@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from tradingagents.backtest import Portfolio, fetch_trading_data
+from tradingagents.backtest import Portfolio, compute_metrics, fetch_trading_data
 
 
 class TestPortfolio:
@@ -106,3 +106,33 @@ class TestTradingData:
         # First trading day of each week
         assert result.index[0] == pd.Timestamp("2024-01-08")  # Mon week 1
         assert result.index[1] == pd.Timestamp("2024-01-15")  # Mon week 2
+
+
+class TestMetrics:
+    """Tests for compute_metrics."""
+
+    def test_total_return(self):
+        equity = [100_000, 105_000, 110_000]
+        result = compute_metrics(equity, [])
+        assert result["total_return_pct"] == 10.0
+
+    def test_max_drawdown(self):
+        equity = [100_000, 110_000, 95_000, 105_000]
+        result = compute_metrics(equity, [])
+        # Drawdown from peak 110k to trough 95k = 15k / 110k = 13.636%
+        assert result["max_drawdown_pct"] == 13.636
+
+    def test_win_rate(self):
+        trades = [100, -50, 200, -10]
+        result = compute_metrics([100_000, 100_000], trades)
+        assert result["win_rate_pct"] == 50.0
+
+    def test_win_rate_no_trades(self):
+        result = compute_metrics([100_000, 100_000], [])
+        assert result["win_rate_pct"] == 0.0
+
+    def test_sharpe_ratio(self):
+        # Constant daily gains: equity goes up by 100 each day for 10 days
+        equity = [100_000 + i * 100 for i in range(11)]
+        result = compute_metrics(equity, [])
+        assert result["sharpe_ratio"] > 0
